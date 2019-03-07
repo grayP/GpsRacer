@@ -12,6 +12,7 @@ import android.os.IBinder;
 import android.support.annotation.Nullable;
 import android.util.Log;
 
+import java.util.Date;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -23,7 +24,8 @@ public class GoogleService extends Service implements LocationListener{
 
     boolean isGPSEnable = false;
     boolean isNetworkEnable = false;
-    double latitude,longitude;
+    double latitude,longitude, speed, bearing;
+    long timeOfReading;
     LocationManager locationManager;
     Location location;
     private Handler mHandler = new Handler();
@@ -84,7 +86,7 @@ public class GoogleService extends Service implements LocationListener{
 
         }else {
 
-            if (isNetworkEnable){
+            if (isNetworkEnable  && !isGPSEnable){
                 location = null;
                 locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,1000,0,this);
                 if (locationManager!=null){
@@ -96,6 +98,9 @@ public class GoogleService extends Service implements LocationListener{
 
                         latitude = location.getLatitude();
                         longitude = location.getLongitude();
+                        speed=location.getSpeed();
+                        bearing=location.getBearing();
+                        timeOfReading=location.getTime();
                         fn_update(location);
                     }
                 }
@@ -105,14 +110,18 @@ public class GoogleService extends Service implements LocationListener{
 
             if (isGPSEnable){
                 location = null;
-                locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER,1000,0,this);
+                locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER,2000,5,this);
                 if (locationManager!=null){
                     location = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
                     if (location!=null){
-                        Log.e("latitude",location.getLatitude()+"");
-                        Log.e("longitude",location.getLongitude()+"");
+                       // Log.e("latitude",location.getLatitude()+"");
+                       // Log.e("longitude",location.getLongitude()+"");
                         latitude = location.getLatitude();
                         longitude = location.getLongitude();
+                        speed=location.getSpeed();
+                        bearing=location.getBearing();
+                       // Log.e("bearing",bearing+"");
+                        timeOfReading=location.getTime();
                         fn_update(location);
                     }
                 }
@@ -141,6 +150,10 @@ public class GoogleService extends Service implements LocationListener{
 
         intent.putExtra("latitude",location.getLatitude()+"");
         intent.putExtra("longitude",location.getLongitude()+"");
+        intent.putExtra("tor", location.getTime() + "");
+        intent.putExtra("sog",location.getSpeed()+"");
+        intent.putExtra("cog",location.getBearing()+"");
+
         sendBroadcast(intent);
     }
 

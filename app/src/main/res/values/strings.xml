@@ -1,4 +1,18 @@
 <resources>
-    <string name="app_name">locationFinder</string>
+    <string name="app_name">GPS Racer</string>
     <string name="action_settings">Settings</string>
+    <string name="fastCog">FastCog</string>
+    <string name="slowCog">SlowCog</string>
+    <string name="fastSog">FastSog</string>
+    <string name="slowSog">SlowSog</string>
+    <string name="numSeconds">NumSeconds</string>
+    <string name="sog_slow">Sog - Slow</string>
+    <string name="cog_fast">Cog - Fast</string>
+    <string name="cog_slow">Cog - Slow</string>
+    <string name="minutes">Minutes</string>
+    <string name="close">Close</string>
+    <string name="sog_fast">Sog - Fast</string>
+    <string name="start">Start</string>
+    <string name="settings">Settings</string>
+    <string name="exit">Exit</string>
 </resources>

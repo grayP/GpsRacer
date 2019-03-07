@@ -125,7 +125,6 @@ public class LocationService extends Service {
     }
     public class MyLocationListener implements LocationListener
     {
-
         public void onLocationChanged(final Location loc)
         {
             Log.i("*****", "Location changed");
@@ -142,21 +141,15 @@ public class LocationService extends Service {
                 intent.putExtra("sog",loc.getSpeed());
                 intent.putExtra("cog",loc.getBearing());
                 sendBroadcast(intent);
-
             }
         }
-
         @Override
         public void onStatusChanged(String provider, int status, Bundle extras) {
-
         }
-
         public void onProviderDisabled(String provider)
         {
             Toast.makeText( getApplicationContext(), "Gps Disabled", Toast.LENGTH_SHORT ).show();
         }
-
-
         public void onProviderEnabled(String provider)
         {
             Toast.makeText( getApplicationContext(), "Gps Enabled", Toast.LENGTH_SHORT).show();

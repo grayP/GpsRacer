@@ -1,29 +1,62 @@
 package au.com.codeflagz.locationfinder;
 
-import java.text.SimpleDateFormat;
-import java.util.Calendar;
 import java.util.Date;
-import java.util.LinkedList;
 
-public class GpsDataService {
+public class GpsDataService implements IGpsDataService {
     public double dSlowSog;
     public double dFastSog;
-    public double dCog;
-    public Date timeOfReading;
+    public double dSlowCog;
+    public double dFastCog;
 
-
-    private double dLat = 0.0;
-    private double dLong = 0.0;
+    public double dLat;
+    public double dLong;
     private java.util.Date timeOfreading;
 
     private double dLastLat;
     private double dLastLong;
     private Date LastTor;
 
-    private double FastFactor = 5.0;
-    private double SlowFactor = 20;
+
+    public void UpdateSpeed(double s, int slowFactor, int fastFactor) {
+        s = s * 1.94384;
+        dSlowSog = UpdatedMovingAverage(s, dSlowSog, slowFactor);
+        dFastSog = UpdatedMovingAverage(s, dFastSog, fastFactor);
+    }
+
+    public void UpdateBearing(double c, int slowFactor, int fastFactor) {
+        if (Math.abs(c) > 0.1) {
+            dSlowCog = UpdatedMovingAverage(c, dSlowCog, slowFactor);
+            dFastCog = UpdatedMovingAverage(c, dFastCog, fastFactor);
+        }
+    }
+
+    public void UpdateBearing(double llat, double llong, int slowFactor, int fastFactor) {
+        dLastLat = dLat;
+        dLastLong = dLong;
+        double distance = getDistance(llat, dLastLat, llong, dLastLong, 0, 0);
+        if (distance > 5.0 && Math.abs(llat) > 0.0) {
+            double d = GetTheBearing(dLastLat, dLastLong, llat, llong);
+            dSlowCog = UpdatedMovingAverage(d, dSlowCog, slowFactor);
+            dFastCog = UpdatedMovingAverage(d, dFastCog, fastFactor);
+            dLat = llat;
+            dLong = llong;
+        }
+    }
+
+    protected static double GetTheBearing(double lat1, double lon1, double lat2, double lon2) {
+        double longitude1 = lon1;
+        double longitude2 = lon2;
+        double latitude1 = Math.toRadians(lat1);
+        double latitude2 = Math.toRadians(lat2);
+        double longDiff = Math.toRadians(longitude2 - longitude1);
+        double y = Math.sin(longDiff) * Math.cos(latitude2);
+        double x = Math.cos(latitude1) * Math.sin(latitude2) - Math.sin(latitude1) * Math.cos(latitude2) * Math.cos(longDiff);
+
+        return (Math.toDegrees(Math.atan2(y, x)) + 360 - 11) % 360;
+    }
 
 
+    @Override
     public void UpdateSog(double llat, double llong, java.util.Date tor) {
         dLastLat = dLat == 0.0 ? llat : dLat;
         dLastLong = dLong == 0.0 ? llong : dLong;
@@ -42,9 +75,16 @@ public class GpsDataService {
         }
 
         Double sog = Distance / lTime * 1000 * 1.94384;
+        if (sog > 0.1 && sog < 100) {
+            dSlowSog = UpdatedMovingAverage(sog, dSlowSog, 20);
+            dFastSog = UpdatedMovingAverage(sog, dFastSog, 5);
+        }
+    }
 
-        dSlowSog = dSlowSog * (SlowFactor - 1) / SlowFactor + sog / SlowFactor;
-        dFastSog = dFastSog * (FastFactor - 1) / FastFactor + sog / FastFactor;
+    @Override
+    public double UpdatedMovingAverage(double newValue, double dMovingAverage, double Factor) {
+        Factor = Math.max(1, Factor);
+        return dMovingAverage * (Factor - 1) / Factor + newValue / Factor;
     }
 
     /**
@@ -57,8 +97,9 @@ public class GpsDataService {
      *
      * @returns Distance in Meters
      */
-    public static double getDistance(double lat1, double lat2, double lon1,
-                                     double lon2, double el1, double el2) {
+    @Override
+    public double getDistance(double lat1, double lat2, double lon1,
+                              double lon2, double el1, double el2) {
 
         final int R = 6371; // Radius of the earth
 
@@ -69,13 +110,9 @@ public class GpsDataService {
                 * Math.sin(lonDistance / 2) * Math.sin(lonDistance / 2);
         double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         double distance = R * c * 1000; // convert to meters
-
         double height = el1 - el2;
-
         distance = Math.pow(distance, 2) + Math.pow(height, 2);
 
         return Math.sqrt(distance);
     }
-
-
 }

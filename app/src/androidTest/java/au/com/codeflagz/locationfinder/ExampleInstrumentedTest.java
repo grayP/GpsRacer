@@ -24,3 +24,6 @@ public class ExampleInstrumentedTest {
         assertEquals("au.com.codeflagz.locationfinder", appContext.getPackageName());
     }
 }
+
+
+

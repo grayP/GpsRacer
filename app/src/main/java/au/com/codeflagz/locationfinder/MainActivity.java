@@ -13,43 +13,49 @@ import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.preference.PreferenceManager;
+import android.provider.Settings;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
+import android.support.v4.view.GestureDetectorCompat;
 import android.util.Log;
+import android.view.GestureDetector;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.Button;
+
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.jjoe64.graphview.DefaultLabelFormatter;
 import com.jjoe64.graphview.GraphView;
-import com.jjoe64.graphview.series.DataPoint;
-import com.jjoe64.graphview.series.LineGraphSeries;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
 
+import au.com.codeflagz.locationfinder.model.GpsGraph;
+import au.com.codeflagz.locationfinder.model.GpsSettings;
 
-public class MainActivity extends Activity {
+
+public class MainActivity extends Activity implements
+        GestureDetector.OnGestureListener,
+        GestureDetector.OnDoubleTapListener {
     private final Handler mHandler = new Handler();
     private long BackPressed;
     private Toast BackToast;
-    Button btn_start;
-    private static final int REQUEST_PERMISSIONS = 100;
+    Button btn_start, btn_setting, btn_exit;
     boolean boolean_permission;
-   // TextView tv_latitude, tv_longitude, ;
-            TextView tv_sog, tv_cog, tv_version;
+    TextView tv_version;
+    private static final int REQUEST_PERMISSIONS = 100;
     SharedPreferences mPref;
     SharedPreferences.Editor medit;
-    Double latitude, longitude, speed;
+    Double latitude, longitude, speed, bearing;
     Date tor;
-    // private Runnable mTimer2;
-    private LineGraphSeries<DataPoint> mSeriesFastSog, mSeriesSlowSog;
-    private SimpleDateFormat sdf;
-    private Calendar calendar;
-    GpsDataService gpsDataService;
+    private GpsDataService gpsDataService = new GpsDataService();
+    private GpsGraph gpsGraph = new GpsGraph();
+    private GpsSettings gpsSettings = new GpsSettings();
+    private GestureDetectorCompat mDetector;
+    private static final String DEBUG_TAG = "Gestures";
 
     @Override
     public void onBackPressed() {
@@ -69,25 +75,43 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        gpsDataService = new GpsDataService();
+        gpsGraph.sogGraph = (GraphView) findViewById(R.id.sogGraph);
+        gpsGraph.cogGraph = (GraphView) findViewById(R.id.cogGraph);
+        gpsGraph.SetupGraph(this.getResources().getDisplayMetrics());
+
+        mDetector = new GestureDetectorCompat(this, this);
+        mDetector.setOnDoubleTapListener(this);
+
         btn_start = (Button) findViewById(R.id.btn_start);
-        tv_sog = (TextView) findViewById(R.id.sog);
-        tv_cog = (TextView) findViewById(R.id.cog);
-        tv_version = (TextView) findViewById(R.id.version);
+        btn_setting = (Button) findViewById(R.id.btn_settings);
+        btn_exit =(Button) findViewById(R.id.btn_Exit);
+        tv_version = (TextView) findViewById(R.id.headerText);
+        tv_version.setText("Race Tactics :" + String.valueOf(getPackageInfo().versionCode));
         mPref = PreferenceManager.getDefaultSharedPreferences(getApplicationContext());
         medit = mPref.edit();
-        //
 
-        tv_version.setText(String.valueOf(getPackageInfo().versionCode));
-        calendar = Calendar.getInstance();
-        sdf = new SimpleDateFormat("mm:ss");
-        SetupGraph();
+        SetupPreferences(mPref);
 
+        btn_setting.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent intent = new Intent(getApplicationContext(), SettingActivity.class);
+                intent.putExtra("GpsSettings", gpsSettings);
+                startActivity(intent);
+            }
+        });
+        btn_exit.setOnClickListener(new View.OnClickListener(){
+            @Override
+            public void onClick(View v){
+                mPref.edit().remove("service").commit();
+                finish();
+               // System.exit(0);
+            }
+        });
         btn_start.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 if (boolean_permission) {
-
                     if (mPref.getString("service", "").matches("")) {
                         medit.putString("service", "service").commit();
 
@@ -104,46 +128,96 @@ public class MainActivity extends Activity {
                     Toast.makeText(getApplicationContext(), "Please enable the gps", Toast.LENGTH_SHORT).show();
                 }
             }
+
         });
         fn_permission();
     }
 
-    private LineGraphSeries<DataPoint> SetupSeries (int colour, int size, String title)
-    {
-        LineGraphSeries<DataPoint> series=  new  LineGraphSeries<>();
-        series.setThickness(size);
-        series.setDrawDataPoints(false);
-        series.setColor(colour);
-        series.setTitle(title);
-
-        return series;
+    private void SetupPreferences(SharedPreferences sharedPref) {
+        gpsSettings.FastSog = sharedPref.getInt(getString(R.string.fastSog), gpsSettings.FastSog);
+        gpsSettings.SlowSog = sharedPref.getInt(getString(R.string.slowSog), gpsSettings.SlowSog);
+        gpsSettings.FastCog = sharedPref.getInt(getString(R.string.fastCog), gpsSettings.FastCog);
+        gpsSettings.SlowCog = sharedPref.getInt(getString(R.string.slowCog), gpsSettings.SlowCog);
+        gpsSettings.NumSeconds=sharedPref.getInt(getString(R.string.numSeconds), gpsSettings.NumSeconds);
     }
 
-    private void SetupGraph() {
-        GraphView graph = (GraphView) findViewById(R.id.graph);
-        mSeriesSlowSog = SetupSeries(android.R.color.holo_red_dark,2,"Sog-Slow");
-        mSeriesFastSog = SetupSeries(android.R.color.black,2,"Sog-Fast");
-        graph.addSeries(mSeriesFastSog);
-        graph.addSeries(mSeriesSlowSog);
-        graph.getViewport().setXAxisBoundsManual(true);
-        graph.getGridLabelRenderer().setLabelFormatter(new DefaultLabelFormatter() {
-            @Override
-            public String formatLabel(double value, boolean isValueX) {
-                if (isValueX) {
-                    return sdf.format(new Date((long) value));
-                } else {
-                    return super.formatLabel(value, isValueX);
-                }
-            }
-        });
-        graph.getGridLabelRenderer().setNumHorizontalLabels(5); // only 4 because of the space
-        Calendar calendar = Calendar.getInstance();
-        Date d1 = calendar.getTime();
-        calendar.add(Calendar.MINUTE, -1);
-        Date d2 = calendar.getTime();
-        graph.getViewport().setMaxX(d1.getTime());
-        graph.getViewport().setMinX(d2.getTime());
-        graph.getGridLabelRenderer().setHumanRounding(false);
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        if (this.mDetector.onTouchEvent(event)) {
+            return true;
+        }
+        return super.onTouchEvent(event);
+    }
+
+    @Override
+    public boolean onDown(MotionEvent event) {
+        Log.d(DEBUG_TAG, "onDown: " + event.toString());
+        return true;
+    }
+
+    @Override
+    public boolean onFling(MotionEvent event1, MotionEvent event2,
+                           float velocityX, float velocityY) {
+        Log.d(DEBUG_TAG, "onFling: " + event1.toString() + event2.toString());
+        SwapGraphs();
+        return true;
+    }
+
+    @Override
+    public void onLongPress(MotionEvent event) {
+        Log.d(DEBUG_TAG, "onLongPress: " + event.toString());
+    }
+
+    @Override
+    public boolean onScroll(MotionEvent event1, MotionEvent event2, float distanceX,
+                            float distanceY) {
+        Log.d(DEBUG_TAG, "onScroll: " + event1.toString() + event2.toString());
+        return true;
+    }
+
+    @Override
+    public void onShowPress(MotionEvent event) {
+        Log.d(DEBUG_TAG, "onShowPress: " + event.toString());
+    }
+
+    @Override
+    public boolean onSingleTapUp(MotionEvent event) {
+        Log.d(DEBUG_TAG, "onSingleTapUp: " + event.toString());
+        return true;
+    }
+
+    @Override
+    public boolean onDoubleTap(MotionEvent event) {
+        Log.d(DEBUG_TAG, "onDoubleTap: " + event.toString());
+        SwapGraphs();
+        return true;
+    }
+
+    @Override
+    public boolean onDoubleTapEvent(MotionEvent event) {
+        Log.d(DEBUG_TAG, "onDoubleTapEvent: " + event.toString());
+        return true;
+    }
+
+
+    private void SwapGraphs() {
+        if (gpsGraph.sogGraph.getVisibility() == View.VISIBLE) {
+            //gpsGraph.sogGraph.animate().alpha(0.0f);
+            gpsGraph.sogGraph.setVisibility(View.GONE);
+            //gpsGraph.cogGraph.animate().alpha(1.0f);
+            gpsGraph.cogGraph.setVisibility(View.VISIBLE);
+        } else {
+            //gpsGraph.cogGraph.animate().alpha(0.0f);
+            gpsGraph.cogGraph.setVisibility(View.GONE);
+            // gpsGraph.sogGraph.animate().alpha(0.1f);
+            gpsGraph.sogGraph.setVisibility(View.VISIBLE);
+        }
+    }
+
+    @Override
+    public boolean onSingleTapConfirmed(MotionEvent event) {
+        Log.d(DEBUG_TAG, "onSingleTapConfirmed: " + event.toString());
+        return true;
     }
 
     private void fn_permission() {
@@ -159,6 +233,7 @@ public class MainActivity extends Activity {
             boolean_permission = true;
         }
     }
+
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
@@ -174,31 +249,59 @@ public class MainActivity extends Activity {
         }
     }
 
-    private BroadcastReceiver broadcastReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
+    private BroadcastReceiver broadcastReceiver;
 
-            latitude = Double.valueOf(intent.getStringExtra("latitude"));
-            longitude = Double.valueOf(intent.getStringExtra("longitude"));
-           // speed = Double.valueOf(intent.getStringExtra("sog"));
-           // String sTor = intent.getStringExtra("tor");
+    {
+        broadcastReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                latitude = Double.valueOf(intent.getStringExtra("latitude"));
+                longitude = Double.valueOf(intent.getStringExtra("longitude"));
+                speed = Double.valueOf(intent.getStringExtra("sog"));
+                bearing = Double.valueOf(intent.getStringExtra("cog"));
+                String sTor = intent.getStringExtra("tor");
 
-           // SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
-           // try {
-           //     tor = format.parse(sTor);
-           // } catch (ParseException e) {
-           //     e.printStackTrace();
-            Calendar calendar = Calendar.getInstance();
-                tor=calendar.getTime();
-           // }
-          //  tv_latitude.setText(latitude + "");
-          //  tv_longitude.setText(longitude + "");
-            gpsDataService.UpdateSog(latitude, longitude, calendar.getTime());
-            mSeriesFastSog.appendData(new DataPoint(tor, gpsDataService.dFastSog), true, 20);
-            mSeriesSlowSog.appendData(new DataPoint(tor, gpsDataService.dSlowSog), true, 20);
-        }
-    };
+                SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
+                try {
+                    tor = format.parse(sTor);
+                } catch (ParseException e) {
+                    e.printStackTrace();
+                    Calendar calendar = Calendar.getInstance();
+                    tor = calendar.getTime();
+                }
+                gpsDataService.UpdateSpeed(speed, gpsSettings.SlowSog, gpsSettings.FastSog);
+                // gpsDataService.UpdateBearing(bearing, gpsSettings.SlowCog, gpsSettings.FastCog);
+                gpsDataService.UpdateBearing(latitude, longitude, gpsSettings.SlowCog, gpsSettings.FastCog);
+                // tv_sog.setText(String.format("%.2f", gpsDataService.dFastSog));
+                Log.e("Fast", gpsDataService.dFastCog + "");
+                Log.e("Slow", gpsDataService.dSlowCog + "");
+                gpsGraph.AddDataAndSetYAxis(gpsDataService.dSlowSog, gpsDataService.dFastSog, tor, gpsSettings.NumSeconds);
+                gpsGraph.AddCogDataAndSetYAxis(gpsDataService.dSlowCog, gpsDataService.dFastCog, tor, gpsSettings.NumSeconds);
+                UpdateText(gpsDataService);
+            }
+        };
+    }
+    private void UpdateText(GpsDataService gpsDataService){
+       try{
+           String output="Lat: " + String.format("%.4f",gpsDataService.dLat) + "";
+           TextView lat = findViewById(R.id.textLatitude);
+           lat.setText(output);
+           output="Long: " + String.format("%.4f",gpsDataService.dLong) + "";
+           TextView llong = findViewById(R.id.textLongitude);
+           llong.setText(output);
+           output="Fast: " + String.format("%.1f",gpsDataService.dFastCog) + "";
+           TextView fastCog = findViewById(R.id.textCogFast);
+           fastCog.setText(output);
+           output="Slow: " + String.format("%.1f",gpsDataService.dSlowCog) + "";
+           TextView slowCog = findViewById(R.id.textCogSlow);
+           slowCog.setText(output);
+       }
+       catch(Exception ex){
 
+       }
+
+
+    }
     @Override
     protected void onResume() {
         super.onResume();
@@ -217,6 +320,10 @@ public class MainActivity extends Activity {
         ActivityManager manager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
         for (ActivityManager.RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {
             if (serviceClass.getName().equals(service.service.getClassName())) {
+                String var1 = serviceClass.getName();
+                String var2 = service.service.getClassName();
+                Log.e("serviceClass.getName()", var1);
+                Log.e("service.getClassName()", var2);
                 return true;
             }
         }
